@@ -245,7 +245,9 @@ def manage_items():
                 placeholder.empty()
                 with placeholder:
                     st.dataframe(merged_data, use_container_width=True)
-                st.success(f"已成功新增/更新品項：'{item_name}'，食材：'{ingredient_name}'！")
+                success_message = st.success(f"已成功新增/更新品項：'{item_name}'，食材：'{ingredient_name}'！")
+                time.sleep(1)
+                success_message.empty()
 
     # 刪除品項
     st.subheader("刪除品項")
@@ -514,7 +516,7 @@ def main():
     # 側邊欄資訊
     with st.sidebar:
         st.title("系統資訊")
-        st.info("版本名稱: v0.0.1")
+        st.info("版本名稱: v0.0.2")
         st.info("開發者: Panda 🐼")
 
     # 建立頁籤
