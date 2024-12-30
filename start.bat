@@ -1,6 +1,9 @@
 @echo off
 echo === Starting the application, please wait... ===
 
+:: Ensure the script runs in the directory containing the batch file
+cd /d %~dp0
+
 :: Check if the virtual environment exists
 if not exist venv (
     echo [ERROR] Virtual environment not found. Please run setup.bat first.
