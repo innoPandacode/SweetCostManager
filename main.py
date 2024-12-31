@@ -143,7 +143,8 @@ def manage_ingredients():
                     ingredients.loc[ingredients["食材名稱"] == name, ["單位", "單價"]] = [unit, price]
                 else:
                     new_row = pd.DataFrame([{"食材名稱": name, "單位": unit, "單價": price}])
-                    ingredients = pd.concat([ingredients, new_row], ignore_index=True)
+                    if not new_row.empty and not new_row.isna().all(axis=None):
+                        ingredients = pd.concat([ingredients, new_row], ignore_index=True)
 
                 # 儲存並即時更新顯示
                 save_data(ingredients, INGREDIENTS_FILE)
@@ -237,7 +238,8 @@ def manage_items():
                         "食材名稱": ingredient_name,
                         "用量": quantity
                     }])
-                    items = pd.concat([items, new_row], ignore_index=True)
+                    if not new_row.empty and not new_row.isna().all(axis=None):
+                        items = pd.concat([items, new_row], ignore_index=True)
 
                 save_data(items, ITEMS_FILE)
 
@@ -385,7 +387,8 @@ def manage_time_cost():
                     "每份建議售價": round(suggested_price, 2),
                     "每份利潤": round(profit_per_unit, 2)
                 }])
-                time_cost = pd.concat([time_cost, updated_cost]).drop_duplicates(subset=["品項名稱"], keep="last")
+                if not updated_cost.empty and not updated_cost.isna().all(axis=None):
+                    time_cost = pd.concat([time_cost, updated_cost]).drop_duplicates(subset=["品項名稱"], keep="last")
                 save_data(time_cost, TIME_COST_FILE)
                 success_message = st.success(f"已成功新增或更新時間成本：'{item_name}'！")
                 time.sleep(1)
@@ -527,7 +530,7 @@ def main():
     # 側邊欄資訊
     with st.sidebar:
         st.title("系統資訊")
-        st.info("版本名稱: v0.0.4")
+        st.info("版本名稱: v0.0.5")
         st.info("開發者: Panda 🐼")
 
     # 建立頁籤
