@@ -43,8 +43,9 @@ streamlit run main.py
 - `食材清單.csv`
 - `品項清單.csv`
 - `時間成本清單.csv`
-- `每分鐘時間成本比例.csv`
+- `基本時薪.csv`
 - `可用單位.csv`
+- `建議售價與利潤結果.csv`
 
 這些文件可直接用 Microsoft Excel 打開並編輯，保存後即可自動應用於系統。
 
