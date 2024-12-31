@@ -41,31 +41,34 @@ SELLING_RESULT_FILE = "建議售價與利潤結果.csv"
 # ---------------------------
 def initialize_data():
     """
-    初始化檔案，若不存在則建立空的 CSV 檔案。
+    初始化檔案與預設數據。
     """
-    if not os.path.exists(INGREDIENTS_FILE):
-        save_data(pd.DataFrame(columns=["食材名稱", "單位", "單價"]), INGREDIENTS_FILE)
-    if not os.path.exists(ITEMS_FILE):
-        save_data(pd.DataFrame(columns=["品項名稱", "食材名稱", "用量"]), ITEMS_FILE)
-    if not os.path.exists(TIME_COST_FILE):
-        save_data(pd.DataFrame(columns=["品項名稱", "製作時間(分鐘)", "時間成本比例(%)", "品項成本", "建議售價"]), TIME_COST_FILE)
-    if not os.path.exists(TIME_COST_RATIO_FILE):
-        save_data(pd.DataFrame({"每分鐘成本比例 (%)": [0.1]}), TIME_COST_RATIO_FILE)
-    if not os.path.exists(UNITS_FILE):
-        save_data(pd.DataFrame(columns=["單位名稱"]), UNITS_FILE)
-    if not os.path.exists(SELLING_RESULT_FILE):
-        save_data(pd.DataFrame(columns=["品項名稱", "數量", "總成本", "總建議售價", "總利潤"]), SELLING_RESULT_FILE)
+    # 定義檔案初始化資訊
+    file_initializations = [
+        ("食材清單.csv", ["食材名稱", "單位", "單價"]),
+        ("品項清單.csv", ["品項名稱", "食材名稱", "用量"]),
+        ("時間成本清單.csv", [
+            "品項名稱", "切份數量", "製作時間(分鐘)", "每份薪資", "品項成本", 
+            "每份品項成本", "每份建議售價", "每份利潤"
+        ]),
+        ("基本時薪.csv", {"基本時薪": [192]}),
+        ("可用單位.csv", ["單位名稱"]),
+        ("建議售價與利潤結果.csv", ["品項名稱", "數量", "總成本", "總建議售價", "總利潤"]),
+    ]
 
-    initialize_default_data()
+    # 初始化檔案
+    for file_name, columns_or_data in file_initializations:
+        if not os.path.exists(file_name):
+            if isinstance(columns_or_data, list):
+                save_data(pd.DataFrame(columns=columns_or_data), file_name)
+            elif isinstance(columns_or_data, dict):
+                save_data(pd.DataFrame(columns_or_data), file_name)
 
-def initialize_default_data():
-    """
-    初始化預設數據，如單位資訊等。
-    """
-    units = load_data(UNITS_FILE)
+    # 初始化預設單位數據
+    units = load_data("可用單位.csv")
     if units.empty:
         default_units = ["g", "kg", "ml", "L", "pcs"]
-        pd.DataFrame({"單位名稱": default_units}).to_csv(UNITS_FILE, index=False)
+        save_data(pd.DataFrame({"單位名稱": default_units}), "可用單位.csv")
 
 # ---------------------------
 # 2. 讀取與儲存資料的工具函式
@@ -164,7 +167,9 @@ def manage_ingredients():
             placeholder.empty()
             with placeholder:
                 st.dataframe(ingredients, use_container_width=True)
-            st.success(f"已刪除食材：'{delete_name}'！")
+            success_message = st.success(f"已刪除食材：'{delete_name}'！")
+            time.sleep(1)
+            success_message.empty()
     else:
         st.warning("無可刪除的食材！")
 
@@ -266,7 +271,9 @@ def manage_items():
             placeholder.empty()
             with placeholder:
                 st.dataframe(merged_data, use_container_width=True)
-            st.success(f"已刪除品項：'{delete_item}'！")
+            success_message = st.success(f"已刪除品項：'{delete_item}'！")
+            time.sleep(1)
+            success_message.empty()
     else:
         st.warning("無可刪除的品項！")
 
@@ -276,126 +283,140 @@ def manage_items():
 def manage_time_cost():
     """
     管理每分鐘時間成本比例，並設定各品項的製作時間。
-    同時自動更新「時間成本比例(%)」與「建議售價」及利潤。
+    同時自動更新每分鐘薪資、品項成本、每份建議售價及利潤。
     """
+    import os
+    import pandas as pd
+    import streamlit as st
+
+    TIME_COST_FILE = "時間成本清單.csv"
+    ITEMS_FILE = "品項清單.csv"
+    INGREDIENTS_FILE = "食材清單.csv"
+    BASE_WAGE_FILE = "基本時薪.csv"
+
+    def load_data(file_name):
+        if os.path.exists(file_name):
+            return pd.read_csv(file_name)
+        return pd.DataFrame()
+
+    def save_data(data, file_name):
+        data.to_csv(file_name, index=False)
+
+    # 讀取或設定基本時薪
+    if not os.path.exists(BASE_WAGE_FILE):
+        save_data(pd.DataFrame({"基本時薪": [192]}), BASE_WAGE_FILE)
+    base_wage_df = load_data(BASE_WAGE_FILE)
+    base_wage = base_wage_df["基本時薪"].iloc[0]
+
     st.header("時間成本管理")
 
-    # 讀取或初始化資料
-    per_minute_percentage_df = load_data(TIME_COST_RATIO_FILE)
-    if per_minute_percentage_df.empty:
-        # 若尚未有任何設定，預設為 0.1%
-        per_minute_percentage_df = pd.DataFrame({"每分鐘成本比例 (%)": [0.1]})
-        save_data(per_minute_percentage_df, TIME_COST_RATIO_FILE)
-    per_minute_percentage = float(per_minute_percentage_df["每分鐘成本比例 (%)"].iloc[0])
-
-    # 每分鐘時間成本比例設定
-    st.subheader("每分鐘時間成本比例設定")
-    new_per_minute_percentage = st.number_input(
-        "每分鐘時間成本比例 (%)", 
-        min_value=0.0, 
-        step=0.01, 
-        value=per_minute_percentage, 
-        format="%.2f"
-    )
-    if st.button("保存時間成本比例"):
-        pd.DataFrame({"每分鐘成本比例 (%)": [new_per_minute_percentage]}).to_csv(TIME_COST_RATIO_FILE, index=False)
-        per_minute_percentage = new_per_minute_percentage
-        success_message_1 = st.success(f"已保存每分鐘時間成本比例：{per_minute_percentage:.2f}%")
+    # 基本時薪設定區
+    st.subheader("基本時薪設定")
+    new_base_wage = st.number_input("輸入基本時薪 (新台幣)", min_value=0, step=1, value=int(base_wage), format="%d")
+    if st.button("保存基本時薪"):
+        save_data(pd.DataFrame({"基本時薪": [new_base_wage]}), BASE_WAGE_FILE)
+        base_wage = new_base_wage  # 更新基薪數值
+        success_message = st.success(f"基本時薪已更新為 {new_base_wage} 元！")
         time.sleep(1)
-        success_message_1.empty()
+        success_message.empty()
 
-        # 即時更新所有已存在的時間成本資料
-        update_all_time_costs(per_minute_percentage)
+    # 計算每分鐘薪資
+    per_minute_wage = base_wage / 60
 
-    # 讀取最新資料
+    # 載入數據
     time_cost = load_data(TIME_COST_FILE)
-
-    # 新增或更新時間成本
-    st.subheader("新增/更新品項時間成本")
     items = load_data(ITEMS_FILE)
     ingredients = load_data(INGREDIENTS_FILE)
+
+    # 確保必需欄位存在，若缺少則補全
+    required_columns = [
+        "品項名稱", "切份數量", "製作時間(分鐘)", "每份薪資", 
+        "品項成本", "每份品項成本", "每份建議售價", "每份利潤"
+    ]
+    for column in required_columns:
+        if column not in time_cost.columns:
+            time_cost[column] = 0
+
+    # 計算品項成本
     if not items.empty and not ingredients.empty:
         merged_data = items.merge(ingredients, on="食材名稱", how="left")
         merged_data["單行成本"] = merged_data["用量"] * merged_data["單價"]
         item_costs = merged_data.groupby("品項名稱")["單行成本"].sum().reset_index()
         item_costs.columns = ["品項名稱", "品項成本"]
 
-        # 確保 time_cost 表格內品項成本即時更新
         if not time_cost.empty:
             time_cost = time_cost.merge(item_costs, on="品項名稱", how="left", suffixes=("", "_new"))
             if "品項成本_new" in time_cost.columns:
                 time_cost["品項成本"] = time_cost.pop("品項成本_new")
-                time_cost["時間成本比例(%)"] = time_cost["製作時間(分鐘)"] * per_minute_percentage
-                time_cost["建議售價"] = time_cost["品項成本"] + (time_cost["品項成本"] * (time_cost["時間成本比例(%)"] / 100))
-                save_data(time_cost, TIME_COST_FILE)
 
-        # 選擇品項並輸入製作時間
+    # 即時更新時間成本
+    if not time_cost.empty:
+        time_cost["每份薪資"] = (time_cost["製作時間(分鐘)"] * per_minute_wage) / time_cost["切份數量"]
+        time_cost["每份品項成本"] = time_cost["品項成本"] / time_cost["切份數量"]
+        time_cost["每份建議售價"] = time_cost["每份薪資"] + time_cost["每份品項成本"]
+        time_cost["每份利潤"] = time_cost["每份建議售價"] - time_cost["每份品項成本"]
+        save_data(time_cost, TIME_COST_FILE)  # 保存更新後的時間成本
+
+    # 新增/更新時間成本
+    st.subheader("新增/更新品項時間成本")
+    if not items.empty:
         with st.form("time_cost_form", clear_on_submit=True):
-            # 只顯示已出現過的品項名稱
-            item_options = item_costs["品項名稱"].unique().tolist()
-            item_name = st.selectbox("選擇品項", options=item_options, key="select_time_cost")
+            item_name = st.selectbox("選擇品項", options=item_costs["品項名稱"].unique(), key="select_time_cost")
             production_time = st.number_input("製作時間 (分鐘)", min_value=0.0, step=1.0, format="%.2f")
+            split_quantity = st.number_input("切份數量", min_value=1, step=1, value=1, format="%d")
             submitted = st.form_submit_button("新增/更新")
 
-            if submitted:
-                if production_time > 0:
-                    # 計算時間成本比例與建議售價
-                    time_cost_percentage = production_time * per_minute_percentage
-                    cost_value = item_costs.loc[item_costs["品項名稱"] == item_name, "品項成本"].values[0]
-                    suggested_price = cost_value + (cost_value * (time_cost_percentage / 100))
+        if submitted:
+            if production_time > 0:
+                item_cost = item_costs.loc[item_costs["品項名稱"] == item_name, "品項成本"].values[0]
+                cost_per_unit = item_cost / split_quantity
+                salary_per_unit = (per_minute_wage * production_time) / split_quantity
+                suggested_price = cost_per_unit + salary_per_unit
+                profit_per_unit = suggested_price - cost_per_unit
 
-                    updated_cost = pd.DataFrame([{
-                        "品項名稱": item_name,
-                        "製作時間(分鐘)": production_time,
-                        "時間成本比例(%)": time_cost_percentage,
-                        "品項成本": cost_value,
-                        "建議售價": suggested_price
-                    }])
-
-                    # 合併並去重
-                    time_cost = pd.concat([time_cost, updated_cost]).drop_duplicates(subset=["品項名稱"], keep="last")
-                    save_data(time_cost, TIME_COST_FILE)
-
-                    st.success(f"已成功新增或更新時間成本：'{item_name}'！")
-    else:
-        st.warning("請先建立品項與食材資料，才能定義時間成本。")
+                # 更新或新增資料
+                updated_cost = pd.DataFrame([{
+                    "品項名稱": item_name,
+                    "切份數量": split_quantity,
+                    "製作時間(分鐘)": production_time,
+                    "每份薪資": round(salary_per_unit, 2),
+                    "品項成本": round(item_cost, 2),
+                    "每份品項成本": round(cost_per_unit, 2),
+                    "每份建議售價": round(suggested_price, 2),
+                    "每份利潤": round(profit_per_unit, 2)
+                }])
+                time_cost = pd.concat([time_cost, updated_cost]).drop_duplicates(subset=["品項名稱"], keep="last")
+                save_data(time_cost, TIME_COST_FILE)
+                success_message = st.success(f"已成功新增或更新時間成本：'{item_name}'！")
+                time.sleep(1)
+                success_message.empty()
 
     # 顯示目前時間成本
     st.subheader("目前時間成本")
     placeholder = st.empty()
     if not time_cost.empty:
-        # 若不存在品項成本欄位，補上預設
-        if "品項成本" not in time_cost.columns:
-            time_cost["品項成本"] = 0
-        # 計算利潤（建議售價 - 品項成本）
-        if "建議售價" in time_cost.columns and "品項成本" in time_cost.columns:
-            time_cost["利潤"] = time_cost["建議售價"] - time_cost["品項成本"]
-        else:
-            time_cost["利潤"] = 0  # 預設值
-
-        # 調整顯示欄位順序
-        desired_order = ["品項名稱", "製作時間(分鐘)", "時間成本比例(%)", "品項成本", "建議售價", "利潤"]
-        time_cost = time_cost[desired_order].fillna(0)
+        desired_order = [
+            "品項名稱", "切份數量", "製作時間(分鐘)", "每份薪資", 
+            "品項成本", "每份品項成本", "每份建議售價", "每份利潤"
+        ]
+        time_cost = time_cost[desired_order]
         with placeholder:
             st.dataframe(time_cost, use_container_width=True)
     else:
         with placeholder:
-            st.warning("尚未定義任何時間成本！")
+            st.warning("尚未定義任何時間成本或品項成本！")
 
-    # 刪除時間成本
+   # 刪除品項時間成本
     st.subheader("刪除品項時間成本")
     if not time_cost.empty:
         delete_name = st.selectbox("選擇要刪除的品項", time_cost["品項名稱"].unique(), key="delete_time_cost")
         if st.button("刪除時間成本"):
+            # 刪除指定時間成本
             time_cost = time_cost[time_cost["品項名稱"] != delete_name]
             save_data(time_cost, TIME_COST_FILE)
 
-            time_cost = load_data(TIME_COST_FILE)
+            # 更新顯示
             if not time_cost.empty:
-                if "建議售價" in time_cost.columns and "品項成本" in time_cost.columns:
-                    time_cost["利潤"] = time_cost["建議售價"] - time_cost["品項成本"]
-                desired_order = ["品項名稱", "製作時間(分鐘)", "時間成本比例(%)", "品項成本", "建議售價", "利潤"]
-                time_cost = time_cost[desired_order].fillna(0)
                 placeholder.empty()
                 with placeholder:
                     st.dataframe(time_cost, use_container_width=True)
@@ -403,45 +424,9 @@ def manage_time_cost():
                 placeholder.empty()
                 with placeholder:
                     st.warning("尚未定義任何時間成本！")
-            st.success(f"已刪除時間成本：'{delete_name}'！")
-
-def update_all_time_costs(per_minute_percentage):
-    """
-    當使用者更新了「每分鐘時間成本比例」時，立即重新計算所有品項的時間成本與建議售價。
-    """
-    # 重新載入資料
-    time_cost = load_data(TIME_COST_FILE)
-    items = load_data(ITEMS_FILE)
-    ingredients = load_data(INGREDIENTS_FILE)
-
-    if not items.empty and not ingredients.empty:
-        merged_data = items.merge(ingredients, on="食材名稱", how="left")
-        merged_data["單行成本"] = merged_data["用量"] * merged_data["單價"]
-        item_costs = merged_data.groupby("品項名稱")["單行成本"].sum().reset_index()
-        item_costs.columns = ["品項名稱", "品項成本"]
-
-        # 與 time_cost 表格進行合併
-        if not time_cost.empty:
-            time_cost = time_cost.merge(item_costs, on="品項名稱", how="left", validate="one_to_one", suffixes=("", "_new"))
-            # 用新計算的品項成本覆蓋舊的
-            if "品項成本_new" in time_cost.columns:
-                time_cost["品項成本"] = time_cost.pop("品項成本_new")
-            # 重新計算「時間成本比例(%)」與「建議售價」
-            time_cost["時間成本比例(%)"] = time_cost["製作時間(分鐘)"] * per_minute_percentage
-            time_cost["建議售價"] = time_cost["品項成本"] + time_cost["品項成本"] * (time_cost["時間成本比例(%)"] / 100)
-        else:
-            # 若時間成本表原本是空的，就直接使用 item_costs 建立初步結構
-            time_cost = item_costs.copy()
-            time_cost["製作時間(分鐘)"] = 0
-            time_cost["時間成本比例(%)"] = 0
-            time_cost["建議售價"] = time_cost["品項成本"]
-
-        save_data(time_cost, TIME_COST_FILE)
-        success_message = st.success("已更新所有品項的時間成本與建議售價！")
-        time.sleep(1)  # 顯示一秒鐘後消失
-        success_message.empty()  # 清除訊息
-    else:
-        st.warning("尚未定義品項和食材，無法更新時間成本。")
+            success_message = st.success(f"已刪除時間成本：'{delete_name}'！")
+            time.sleep(1)
+            success_message.empty()
 
 # ---------------------------
 # 6. 建議售價與利潤計算模組
@@ -450,9 +435,21 @@ def calculate_selling_price_and_profit():
     """
     依據使用者選擇的品項與數量，計算總售價與總利潤，並可儲存結果。
     """
+
+    TIME_COST_FILE = "時間成本清單.csv"
+    SELLING_RESULT_FILE = "利潤計算結果.csv"
+
+    def load_data(file_name):
+        if os.path.exists(file_name):
+            return pd.read_csv(file_name)
+        return pd.DataFrame()
+
+    def save_data(data, file_name):
+        data.to_csv(file_name, index=False)
+
     st.header("建議售價和利潤計算")
 
-    # 載入時間成本（含品項成本與建議售價）
+    # 載入時間成本（含每份品項成本、建議售價和利潤）
     time_cost = load_data(TIME_COST_FILE)
     if time_cost.empty:
         st.warning("尚未定義時間成本！請先在『時間成本管理』中設定建議售價。")
@@ -468,32 +465,43 @@ def calculate_selling_price_and_profit():
     if st.button("計算總售價和利潤"):
         if selected_items:
             results = []
+            total_cost_sum = 0
+            total_price_sum = 0
+            total_profit_sum = 0
+
             for item_name, qty in quantities.items():
                 if qty > 0:
                     item_data = time_cost[time_cost["品項名稱"] == item_name]
-                    suggested_price = item_data["建議售價"].values[0]
-                    cost_value = item_data["品項成本"].values[0]
+                    cost_per_unit = item_data["每份品項成本"].values[0]
+                    suggested_price_per_unit = item_data["每份建議售價"].values[0]
+                    profit_per_unit = item_data["每份利潤"].values[0]
 
-                    total_price = suggested_price * qty
-                    total_cost = cost_value * qty
-                    profit = total_price - total_cost
+                    total_price = suggested_price_per_unit * qty
+                    total_cost = cost_per_unit * qty
+                    total_profit = profit_per_unit * qty
+
+                    total_cost_sum += total_cost
+                    total_price_sum += total_price
+                    total_profit_sum += total_profit
 
                     results.append({
                         "品項名稱": item_name,
                         "數量": qty,
                         "總成本": total_cost,
                         "總建議售價": total_price,
-                        "總利潤": profit
+                        "總利潤": total_profit
                     })
 
             results_df = pd.DataFrame(results)
             st.subheader("計算結果")
             st.dataframe(results_df, use_container_width=True)
 
-            # 提供保存結果選項
-            if st.button("保存結果"):
-                save_data(results_df, SELLING_RESULT_FILE)
-                st.success(f"計算結果已保存至 {SELLING_RESULT_FILE} 檔案！")
+            # 顯示總計
+            st.write("### 總計")
+            st.write(f"總成本：{total_cost_sum}")
+            st.write(f"總建議售價：{total_price_sum}")
+            st.write(f"總利潤：{total_profit_sum}")
+
         else:
             st.warning("請至少選擇一個品項並輸入數量！")
 
@@ -519,7 +527,7 @@ def main():
     # 側邊欄資訊
     with st.sidebar:
         st.title("系統資訊")
-        st.info("版本名稱: v0.0.3")
+        st.info("版本名稱: v0.0.4")
         st.info("開發者: Panda 🐼")
 
     # 建立頁籤
